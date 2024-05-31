@@ -3,7 +3,7 @@ import { IdentifyService } from "../services/identify.service";
 
 const unionFind = new IdentifyService();
 
-export const identifyController = (req: Request, res: Response) => {
+export const identifyController = async (req: Request, res: Response) => {
   const { email, phoneNumber } = req.body;
 
   if (!email && !phoneNumber) {
@@ -12,6 +12,6 @@ export const identifyController = (req: Request, res: Response) => {
       .send({ error: "Either email or phoneNumber must be provided" });
   }
 
-  const result = unionFind.find(phoneNumber, email);
+  const result = await unionFind.find(phoneNumber, email);
   res.status(200).json(result);
 };

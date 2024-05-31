@@ -1,4 +1,5 @@
-import { Contact, linkPrecedenceConstant } from "../models/contact";
+import { Contact, linkPrecedenceConstant } from "../models/contact.model";
+import contactRepo from "../repositories/contact.repository";
 
 interface ContactDTO {
   contact: {
@@ -10,30 +11,24 @@ interface ContactDTO {
 }
 
 export class IdentifyService {
-  store: Contact[] = [];
-
-  union(phoneNumber?: string, email?: string) {
+  async union(phoneNumber?: string, email?: string) {
     let contactByPhone: Contact | undefined,
       contactByEmail: Contact | undefined;
 
     if (phoneNumber) {
-      contactByPhone = this.store.find(
-        (elem: Contact) => elem.phoneNumber === phoneNumber,
-      );
+      contactByPhone = await contactRepo.getContactByPhoneNumber(phoneNumber);
     }
     if (email) {
-      contactByEmail = this.store.find((elem: Contact) => elem.email === email);
+      contactByEmail = await contactRepo.getContactByEmail(email);
     }
 
     if (!contactByPhone && !contactByEmail) {
-      const id = this.store.length;
       const newContact = new Contact(
-        id,
+        linkPrecedenceConstant.primary,
         phoneNumber,
         email,
-        linkPrecedenceConstant.primary,
       );
-      this.store.push(newContact);
+      await contactRepo.create(newContact);
       return;
     }
     if (
@@ -48,16 +43,14 @@ export class IdentifyService {
         return;
       const existingContact = contactByPhone || contactByEmail;
 
-      const id = this.store.length;
       const linkedId = existingContact?.linkedId || existingContact?.id;
       const newContact = new Contact(
-        id,
+        linkPrecedenceConstant.secondary,
         phoneNumber,
         email,
-        linkPrecedenceConstant.secondary,
         linkedId,
       );
-      this.store.push(newContact);
+      await contactRepo.create(newContact);
     }
 
     if (
@@ -65,73 +58,68 @@ export class IdentifyService {
       contactByEmail &&
       contactByPhone.id !== contactByEmail.id
     ) {
-      const contactByPhoneParent =
-        contactByPhone.linkedId !== undefined
-          ? this.store[contactByPhone.linkedId]
-          : contactByPhone;
-      const contactByEmailParent =
-        contactByEmail.linkedId !== undefined
-          ? this.store[contactByEmail.linkedId]
-          : contactByEmail;
+      let contactByPhoneParent = contactByPhone;
+      if (contactByPhone.linkedId) {
+        const contactParent = await contactRepo.getContactById(
+          contactByPhone.linkedId,
+        );
+        if (contactParent) {
+          contactByPhoneParent = contactParent;
+        }
+      }
+
+      let contactByEmailParent = contactByEmail;
+      if (contactByEmail.linkedId) {
+        const contactParent = await contactRepo.getContactById(
+          contactByEmail.linkedId,
+        );
+        if (contactParent) {
+          contactByEmailParent = contactParent;
+        }
+      }
 
       if (contactByPhoneParent.createdAt < contactByEmailParent.createdAt) {
-        this.linkContacts(contactByEmail, contactByPhoneParent);
+        await this.linkContacts(contactByEmail, contactByPhoneParent);
       } else {
-        this.linkContacts(contactByPhone, contactByEmailParent);
+        await this.linkContacts(contactByPhone, contactByEmailParent);
       }
     }
   }
 
-  linkContacts(contact: Contact, parentContact: Contact) {
+  async linkContacts(contact: Contact, parentContact: Contact) {
     if (contact.linkedId === parentContact.id) return;
 
-    contact.linkPrecedence = linkPrecedenceConstant.secondary;
-    contact.linkedId = parentContact.id;
-    contact.updatedAt = new Date();
+    await contactRepo.updateLinkedId(contact.id!, parentContact.id!);
 
-    this.store.forEach((elem) => {
-      if (elem.linkedId === contact.id) {
-        elem.linkedId = parentContact.id;
-        elem.updatedAt = new Date();
-      }
-    });
+    await contactRepo.updateManyLinkedIds(contact.id!, parentContact.id!);
   }
 
-  find(phoneNumber?: string, email?: string): ContactDTO {
-    this.union(phoneNumber, email);
+  async find(phoneNumber?: string, email?: string): Promise<ContactDTO> {
+    await this.union(phoneNumber, email);
 
     let contact: Contact | undefined;
     if (phoneNumber) {
-      contact = this.store.find((elem) => elem.phoneNumber === phoneNumber);
+      contact = await contactRepo.getContactByPhoneNumber(phoneNumber);
     }
     if (!contact && email) {
-      contact = this.store.find((elem) => elem.email === email);
+      contact = await contactRepo.getContactByEmail(email);
     }
     if (!contact) {
-      return {
-        contact: {
-          primaryContactId: 0,
-          emails: [],
-          phoneNumbers: [],
-          secondaryContactIds: [],
-        },
-      };
+      throw new Error("contact not found");
     }
 
-    const primaryContactId =
-      contact.linkPrecedence === linkPrecedenceConstant.primary
-        ? contact.id
-        : contact.linkedId;
+    const primaryContactId = contact.linkedId ? contact.linkedId : contact.id;
 
     const emails = new Set<string>();
     const phoneNumbers = new Set<string>();
     const secondaryContactIds: number[] = [];
 
-    this.store.forEach((elem) => {
+    const contacts = await contactRepo.getAllLinkedToId(primaryContactId!);
+    contacts.forEach((elem) => {
       if (elem.id === primaryContactId || elem.linkedId === primaryContactId) {
         if (elem.email) emails.add(elem.email);
         if (elem.phoneNumber) phoneNumbers.add(elem.phoneNumber);
-        if (elem.id !== primaryContactId) secondaryContactIds.push(elem.id);
+        if (elem.id !== primaryContactId) secondaryContactIds.push(elem.id!);
       }
     });
 

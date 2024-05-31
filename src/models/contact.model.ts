@@ -1,21 +1,19 @@
 export class Contact {
-  public id: number;
+  public id?: number;
   public phoneNumber?: string;
   public email?: string;
   public linkedId?: number;
-  public linkPrecedence?: string;
+  public linkPrecedence: string;
   public createdAt: Date;
   public updatedAt: Date;
   public deletedAt?: Date;
 
   constructor(
-    id: number,
+    linkPrecedence: string,
     phoneNumber?: string,
     email?: string,
-    linkPrecedence?: string,
     linkedId?: number,
   ) {
-    this.id = id;
     this.phoneNumber = phoneNumber;
     this.email = email;
     this.linkedId = linkedId;
