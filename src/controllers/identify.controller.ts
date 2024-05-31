@@ -11,7 +11,11 @@ export const identifyController = async (req: Request, res: Response) => {
       .status(400)
       .send({ error: "Either email or phoneNumber must be provided" });
   }
-
-  const result = await unionFind.find(phoneNumber, email);
-  res.status(200).json(result);
+  try {
+    const result = await unionFind.find(phoneNumber, email);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error in fetching contacts", error);
+    res.status(500).send("Something went wrong");
+  }
 };
